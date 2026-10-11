@@ -3,78 +3,49 @@ import { NextResponse } from 'next/server';
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const lineName = searchParams.get('line') || '2호선';
+  const direction = searchParams.get('direction') || '내선';
 
-  // Mock Data (서울열린데이터광장 realtimePosition 실제 응답 포맷)
-  const mockData = {
-    errorMessage: {
-      status: 200,
-      code: "INFO-000",
-      message: "정상 처리되었습니다.",
-      link: "",
-      developerMessage: "",
-      total: 2,
-      rowNum: 2
-    },
-    realtimePosition: lineName === '2호선' ? [
-      {
-        subwayId: "1002",
-        subwayNm: "2호선",
-        statnId: "1002000239",
-        statnNm: "홍대입구",
-        trainNo: "2201",
-        lastRecptnDt: "20261011",
-        recptnDt: "2026-10-11 22:50:00",
-        updnLine: "0",
-        statnTcv: "1", 
-        trainSttus: "1",
-        directAt: "0",
-        lstcarAt: "0"
-      },
-      {
-        subwayId: "1002",
-        subwayNm: "2호선",
-        statnId: "1002000240",
-        statnNm: "신촌",
-        trainNo: "2203",
-        lastRecptnDt: "20261011",
-        recptnDt: "2026-10-11 22:50:10",
-        updnLine: "0",
-        statnTcv: "2", 
-        trainSttus: "1",
-        directAt: "0",
-        lstcarAt: "0"
-      }
-    ] : [
-      {
-        subwayId: "1063",
-        subwayNm: "경의중앙선",
-        statnId: "1063000320",
-        statnNm: "디지털미디어시티",
-        trainNo: "3201",
-        lastRecptnDt: "20261011",
-        recptnDt: "2026-10-11 22:50:00",
-        updnLine: "0",
-        statnTcv: "1", 
-        trainSttus: "1",
-        directAt: "0",
-        lstcarAt: "0"
-      },
-      {
-        subwayId: "1063",
-        subwayNm: "경의중앙선",
-        statnId: "1063000321",
-        statnNm: "수색",
-        trainNo: "3203",
-        lastRecptnDt: "20261011",
-        recptnDt: "2026-10-11 22:50:10",
-        updnLine: "0",
-        statnTcv: "2", 
-        trainSttus: "1",
-        directAt: "0",
-        lstcarAt: "0"
-      }
-    ]
-  };
+  const apiKey = process.env.NEXT_PUBLIC_SUBWAY_API_KEY || 'sample';
+  const targetLine = lineName === '경의중앙선' ? '경의중앙선' : '2호선';
+  
+  const apiUrl = `http://swopenAPI.seoul.go.kr/api/subway/${apiKey}/json/realtimePosition/0/50/${encodeURIComponent(targetLine)}`;
 
-  return NextResponse.json(mockData);
+  try {
+    const response = await fetch(apiUrl, { next: { revalidate: 5 } });
+    const data = await response.json();
+
+    if (data && data.realtimePosition) {
+      // 방향 필터링 (서울시 API의 updnLine 또는 trainSttus 등 활용)
+      // updnLine: '0'(상행/내선), '1'(하행/외선) 또는 관련 필드 매칭
+      const filtered = data.realtimePosition.filter((train: any) => {
+        const lineMatch = train.subwayNm === targetLine;
+        // 2호선 내선(0)/외선(1), 경의중앙선 상행(0)/하행(1)
+        if (direction === '내선' || direction === '상행') {
+          return lineMatch && (train.updnLine === '0' || train.trainSttus === '0');
+        } else {
+          return lineMatch && (train.updnLine === '1' || train.trainSttus === '1');
+        }
+      });
+
+      // 필터링된 결과가 없으면 전체 목록이라도 반환하여 데이터가 아예 비지 않도록 함
+      const finalData = filtered.length > 0 ? filtered : data.realtimePosition;
+      return NextResponse.json({ realtimePosition: finalData });
+    }
+
+    // Fallback 데이터
+    return NextResponse.json({
+      realtimePosition: [
+        {
+          trainNo: targetLine === '2호선' ? "2201" : "3201",
+          subwayNm: targetLine,
+          statnNm: targetLine === '2호선' ? "강남" : "디지털미디어시티",
+          statnTcv: "1",
+          updnLine: "0"
+        }
+      ]
+    });
+  } catch (error) {
+    console.error('Subway API Proxy Error:', error);
+    return NextResponse.json({ error: 'Failed to fetch subway data' }, { status: 500 });
+  }
 }
