@@ -1,21 +1,30 @@
-// src/app/page.tsx
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import { Train, Play, Square, AlertTriangle, RefreshCw, MapPin } from 'lucide-react';
 import DelayModal from '@/components/DelayModal';
 
-// 경의중앙선 주요 역 리스트
-const GANGUI_STATIONS = [
-  "문산", "파주", "금촌", "금릉", "운정", "야당", "탄현", "일산", "백마", "곡산", 
-  "대곡", "능곡", "행신", "화전", "수색", "디지털미디어시티", "가좌", "신촌", 
-  "공덕", "용산", "이촌", "서빙고", "한남", "옥수", "응봉", "왕십리", "청량리", 
-  "회기", "중랑", "상봉", "망우", "구리", "도농", "양정", "덕소", "팔당", "운길산", "양수"
-];
+// 노선별 역 리스트
+const SUBWAY_STATIONS: Record<string, string[]> = {
+  "2호선": [
+    "시청", "을지로입구", "을지로3가", "을지로4가", "동대문역사문화공원", "신당", "상왕십리", 
+    "왕십리", "한양대", "뚝섬", "성수", "건대입구", "구의", "강변", "잠실나루", "잠실", 
+    "잠실새내", "종합운동장", "삼성", "선릉", "역삼", "강남", "교대", "서초", "방배", 
+    "사당", "낙성대", "서울대입구", "봉천", "신림", "신대방", "구로디지털단지", "대림", 
+    "신도림", "문래", "영등포구청", "당산", "합정", "홍대입구", "신촌", "이대", "아현", "충정로"
+  ],
+  "경의중앙선": [
+    "문산", "파주", "금촌", "금릉", "운정", "야당", "탄현", "일산", "백마", "곡산", 
+    "대곡", "능곡", "행신", "화전", "수색", "디지털미디어시티", "가좌", "신촌", 
+    "공덕", "용산", "이촌", "서빙고", "한남", "옥수", "응봉", "왕십리", "청량리", 
+    "회기", "중랑", "상봉", "망우", "구리", "도농", "양정", "덕소", "팔당", "운길산", "양수"
+  ]
+};
 
 export default function Home() {
+  const [selectedLine, setSelectedLine] = useState<'2호선' | '경의중앙선'>('2호선');
   const [isBoarded, setIsBoarded] = useState(false);
-  const [startStation, setStartStation] = useState('디지털미디어시티');
+  const [startStation, setStartStation] = useState('강남');
   const [endStation, setEndStation] = useState('홍대입구');
   
   // 상태 관리
@@ -25,9 +34,21 @@ export default function Home() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [apiData, setApiData] = useState<any[]>([]);
 
+  // 노선 변경 시 출발/도착역 초기화
+  const handleLineChange = (line: '2호선' | '경의중앙선') => {
+    setSelectedLine(line);
+    if (line === '2호선') {
+      setStartStation('강남');
+      setEndStation('홍대입구');
+    } else {
+      setStartStation('디지털미디어시티');
+      setEndStation('공덕');
+    }
+  };
+
   const fetchSubwayData = async () => {
     try {
-      const res = await fetch('/api/subway?line=경의중앙선');
+      const res = await fetch(`/api/subway?line=${encodeURIComponent(selectedLine)}`);
       const json = await res.json();
       if (json.realtimePosition) {
         setApiData(json.realtimePosition);
@@ -39,7 +60,7 @@ export default function Home() {
 
   useEffect(() => {
     fetchSubwayData();
-  }, []);
+  }, [selectedLine]);
 
   // 3분(180초) 정차 타이머 시뮬레이션
   useEffect(() => {
@@ -85,35 +106,61 @@ export default function Home() {
       <div className="w-full max-w-md bg-white shadow-2xl rounded-3xl overflow-hidden border border-slate-200 flex flex-col">
         
         {/* Header */}
-        <div className="bg-gradient-to-r from-teal-700 to-emerald-800 text-white p-6 shadow-md">
+        <div className="bg-gradient-to-r from-emerald-600 to-teal-800 text-white p-6 shadow-md">
           <div className="flex justify-between items-center mb-3">
             <span className="bg-white/20 text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider backdrop-blur-md">
-              경의중앙선 전용
+              실시간 정차 감지
             </span>
-            <span className="text-xs text-teal-200 font-mono">v1.0 Live</span>
+            <span className="text-xs text-emerald-200 font-mono">v1.1 Live</span>
           </div>
           <h1 className="text-2xl font-black tracking-tight flex items-center gap-2">
             <Train className="w-7 h-7" /> 왜멈추니
           </h1>
-          <p className="text-teal-100 text-xs mt-1">터널 내 지연 감지 및 실시간 지연증명서 자동 발급</p>
+          <p className="text-emerald-100 text-xs mt-1">터널 내 지연 감지 및 실시간 지연증명서 자동 발급</p>
         </div>
 
         {/* Content Body */}
         <div className="p-6 flex flex-col gap-5">
+
+          {/* Line Selection Tabs */}
+          <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1.5 rounded-2xl">
+            <button
+              onClick={() => handleLineChange('2호선')}
+              disabled={isBoarded}
+              className={`py-2 text-xs font-bold rounded-xl transition ${
+                selectedLine === '2호선'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              } disabled:opacity-50`}
+            >
+              2호선
+            </button>
+            <button
+              onClick={() => handleLineChange('경의중앙선')}
+              disabled={isBoarded}
+              className={`py-2 text-xs font-bold rounded-xl transition ${
+                selectedLine === '경의중앙선'
+                  ? 'bg-teal-700 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              } disabled:opacity-50`}
+            >
+              경의중앙선
+            </button>
+          </div>
           
           {/* Station Selection (Dropdowns) */}
           <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3 shadow-inner">
             <div className="flex justify-between items-center">
               <label className="text-xs font-bold text-slate-600 uppercase flex items-center gap-1">
-                <MapPin className="w-3.5 h-3.5 text-teal-600" /> 출발역
+                <MapPin className="w-3.5 h-3.5 text-emerald-600" /> 출발역
               </label>
               <select 
                 value={startStation} 
                 onChange={(e) => setStartStation(e.target.value)}
                 disabled={isBoarded}
-                className="bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-800 w-48 shadow-sm focus:outline-teal-600 disabled:bg-slate-100 cursor-pointer"
+                className="bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-800 w-48 shadow-sm focus:outline-emerald-600 disabled:bg-slate-100 cursor-pointer"
               >
-                {GANGUI_STATIONS.map((st) => (
+                {SUBWAY_STATIONS[selectedLine].map((st) => (
                   <option key={st} value={st}>{st}역</option>
                 ))}
               </select>
@@ -127,9 +174,9 @@ export default function Home() {
                 value={endStation} 
                 onChange={(e) => setEndStation(e.target.value)}
                 disabled={isBoarded}
-                className="bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-800 w-48 shadow-sm focus:outline-teal-600 disabled:bg-slate-100 cursor-pointer"
+                className="bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-800 w-48 shadow-sm focus:outline-emerald-600 disabled:bg-slate-100 cursor-pointer"
               >
-                {GANGUI_STATIONS.map((st) => (
+                {SUBWAY_STATIONS[selectedLine].map((st) => (
                   <option key={st} value={st}>{st}역</option>
                 ))}
               </select>
@@ -140,15 +187,15 @@ export default function Home() {
           {!isBoarded ? (
             <button
               onClick={handleStartBoarding}
-              className="w-full bg-teal-700 hover:bg-teal-800 text-white font-bold py-4 rounded-2xl shadow-lg shadow-teal-700/30 flex items-center justify-center gap-2 transition active:scale-[0.98] cursor-pointer"
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-2xl shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 transition active:scale-[0.98] cursor-pointer"
             >
               <Play className="w-5 h-5 fill-current" /> 탑승 시작하기
             </button>
           ) : (
             <div className="space-y-4 animate-in fade-in">
-              <div className="bg-teal-50 border border-teal-200 p-4 rounded-2xl text-center space-y-1 shadow-sm">
-                <p className="text-xs font-bold text-teal-700">🟢 실시간 센서 및 공공 API 연동 감지 중</p>
-                <p className="text-sm font-extrabold text-teal-900">{startStation} ➔ {endStation} 구간 주행 중</p>
+              <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl text-center space-y-1 shadow-sm">
+                <p className="text-xs font-bold text-emerald-700">🟢 실시간 센서 및 공공 API 연동 감지 중</p>
+                <p className="text-sm font-extrabold text-emerald-900">[{selectedLine}] {startStation} ➔ {endStation} 구간 주행 중</p>
               </div>
 
               {/* 3-Minute Simulation Toggle */}
@@ -161,7 +208,7 @@ export default function Home() {
                     type="checkbox" 
                     checked={isStationary} 
                     onChange={(e) => setIsStationary(e.target.checked)}
-                    className="w-5 h-5 accent-teal-600 cursor-pointer"
+                    className="w-5 h-5 accent-emerald-600 cursor-pointer"
                   />
                 </div>
                 {isStationary && (
@@ -186,7 +233,7 @@ export default function Home() {
           {/* Public API Status Preview */}
           <div className="pt-4 border-t border-slate-200">
             <div className="flex justify-between items-center mb-2">
-              <span className="text-xs font-bold text-slate-500">공공 API 실시간 열차 상태</span>
+              <span className="text-xs font-bold text-slate-500">공공 API 실시간 열차 상태 ({selectedLine})</span>
               <button onClick={fetchSubwayData} className="text-slate-400 hover:text-slate-700 p-1">
                 <RefreshCw className="w-3.5 h-3.5" />
               </button>
@@ -208,7 +255,7 @@ export default function Home() {
       <DelayModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        line="경의중앙선"
+        line={selectedLine}
         startStation={startStation}
         endStation={endStation}
         delayMinutes={Math.ceil(delaySeconds / 60)}
