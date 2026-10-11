@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Train, Play, Square, AlertTriangle, RefreshCw, ArrowUpDown, Moon, Sun, ShieldCheck } from 'lucide-react';
+import { Train, Play, Square, AlertTriangle, RefreshCw, ArrowUpDown, ShieldCheck } from 'lucide-react';
 import DelayModal from '@/components/DelayModal';
 
 const SUBWAY_STATIONS: Record<string, string[]> = {
@@ -25,16 +25,14 @@ export default function Home() {
   const [isBoarded, setIsBoarded] = useState(false);
   const [startStation, setStartStation] = useState('강남');
   const [endStation, setEndStation] = useState('홍대입구');
-  const [isDarkMode, setIsDarkMode] = useState(false);
   
-  // 정차 타이머 및 API 상태
   const [isStationary, setIsStationary] = useState(false);
   const [delaySeconds, setDelaySeconds] = useState(0);
   const [isDelayConfirmed, setIsDelayConfirmed] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [apiData, setApiData] = useState<any[]>([]);
 
-  // 노선 변경 처리
+  // 노선 스위칭
   const handleLineChange = (line: '2호선' | '경의중앙선') => {
     setSelectedLine(line);
     if (line === '2호선') {
@@ -46,7 +44,7 @@ export default function Home() {
     }
   };
 
-  // 출발역 <-> 도착역 반대로 스와프
+  // 출발역 <-> 도착역 상호 전환
   const handleSwapStations = () => {
     if (isBoarded) return;
     const temp = startStation;
@@ -70,7 +68,7 @@ export default function Home() {
     fetchSubwayData();
   }, [selectedLine]);
 
-  // 정차 감지 타이머 (3분 = 180초)
+  // 3분 정차 타이머
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (isBoarded && isStationary) {
@@ -110,64 +108,100 @@ export default function Home() {
   };
 
   return (
-    <main className={`min-h-screen w-full flex flex-col items-center justify-center p-4 ${isDarkMode ? 'dark bg-slate-900 text-slate-100' : 'bg-[#f2f4f6] text-[#191f28]'}`}>
-      <div className="w-full max-w-md bg-white dark:bg-slate-800 shadow-xl rounded-3xl overflow-hidden border border-slate-200/60 dark:border-slate-700/60 p-6 space-y-6">
+    <main 
+      className="min-h-screen w-full flex flex-col items-center justify-center p-4"
+      style={{ backgroundColor: '#f2f4f6', color: '#191f28' }}
+    >
+      <div 
+        className="w-full max-w-md shadow-xl rounded-3xl p-6 space-y-5"
+        style={{ backgroundColor: '#ffffff', borderRadius: '24px', boxShadow: '0 10px 30px rgba(0,0,0,0.08)' }}
+      >
         
-        {/* Top Header */}
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400">
+        {/* Header */}
+        <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+          <div className="flex items-center gap-2.5">
+            <div 
+              className="w-10 h-10 rounded-2xl flex items-center justify-center"
+              style={{ backgroundColor: '#e8f3ff', color: '#3182f6' }}
+            >
               <Train className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight">왜멈추니</h1>
-              <p className="text-xs text-slate-400 font-medium">지하철 실시간 정차 감지기</p>
+              <h1 className="text-xl font-extrabold tracking-tight" style={{ margin: 0, fontSize: '20px' }}>왜멈추니</h1>
+              <p className="text-xs text-gray-400 font-medium" style={{ margin: 0, fontSize: '12px' }}>실시간 터널 정차 감지기</p>
             </div>
           </div>
-          <button 
-            onClick={() => setIsDarkMode(!isDarkMode)}
-            className="p-2 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 transition"
+          <span 
+            className="text-xs font-bold px-2.5 py-1 rounded-full"
+            style={{ backgroundColor: '#f2f4f6', color: '#6b7684', fontSize: '11px' }}
           >
-            {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-          </button>
+            v1.2 Live
+          </span>
         </div>
 
-        {/* Line Selector (Toss Tab Style) */}
-        <div className="grid grid-cols-2 p-1 bg-slate-100 dark:bg-slate-700/50 rounded-2xl">
+        {/* Line Tabs */}
+        <div 
+          className="grid grid-cols-2 p-1.5 rounded-2xl gap-1"
+          style={{ backgroundColor: '#f2f4f6', borderRadius: '16px' }}
+        >
           <button
             onClick={() => handleLineChange('2호선')}
             disabled={isBoarded}
-            className={`py-2.5 text-xs font-bold rounded-xl transition ${
-              selectedLine === '2호선'
-                ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm'
-                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-            } disabled:opacity-40`}
+            style={{
+              padding: '10px 0',
+              borderRadius: '12px',
+              border: 'none',
+              fontWeight: 'bold',
+              fontSize: '13px',
+              cursor: 'pointer',
+              backgroundColor: selectedLine === '2호선' ? '#ffffff' : 'transparent',
+              color: selectedLine === '2호선' ? '#3182f6' : '#8b95a1',
+              boxShadow: selectedLine === '2호선' ? '0 2px 8px rgba(0,0,0,0.06)' : 'none'
+            }}
           >
             2호선
           </button>
           <button
             onClick={() => handleLineChange('경의중앙선')}
             disabled={isBoarded}
-            className={`py-2.5 text-xs font-bold rounded-xl transition ${
-              selectedLine === '경의중앙선'
-                ? 'bg-white dark:bg-slate-800 text-teal-600 dark:text-teal-400 shadow-sm'
-                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-            } disabled:opacity-40`}
+            style={{
+              padding: '10px 0',
+              borderRadius: '12px',
+              border: 'none',
+              fontWeight: 'bold',
+              fontSize: '13px',
+              cursor: 'pointer',
+              backgroundColor: selectedLine === '경의중앙선' ? '#ffffff' : 'transparent',
+              color: selectedLine === '경의중앙선' ? '#00a389' : '#8b95a1',
+              boxShadow: selectedLine === '경의중앙선' ? '0 2px 8px rgba(0,0,0,0.06)' : 'none'
+            }}
           >
             경의중앙선
           </button>
         </div>
 
-        {/* Station Selection Box with Swap Button */}
-        <div className="relative bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 space-y-3">
-          <div className="flex flex-col gap-3">
+        {/* Station Selection Box + Swap Button */}
+        <div 
+          className="relative p-4 rounded-2xl space-y-3"
+          style={{ backgroundColor: '#f9fafb', border: '1px solid #f2f4f6', borderRadius: '18px', position: 'relative' }}
+        >
+          <div className="space-y-3" style={{ paddingRight: '40px' }}>
             <div>
-              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">출발역</span>
+              <label className="text-xs font-bold text-gray-400 block mb-1">출발역</label>
               <select
                 value={startStation}
                 onChange={(e) => setStartStation(e.target.value)}
                 disabled={isBoarded}
-                className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-sm font-bold focus:outline-blue-500 disabled:opacity-50"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: '12px',
+                  border: '1px solid #e5e8eb',
+                  backgroundColor: '#ffffff',
+                  fontWeight: 'bold',
+                  fontSize: '14px',
+                  color: '#191f28'
+                }}
               >
                 {SUBWAY_STATIONS[selectedLine].map((st) => (
                   <option key={st} value={st}>{st}역</option>
@@ -176,12 +210,21 @@ export default function Home() {
             </div>
 
             <div>
-              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">도착역</span>
+              <label className="text-xs font-bold text-gray-400 block mb-1">도착역</label>
               <select
                 value={endStation}
                 onChange={(e) => setEndStation(e.target.value)}
                 disabled={isBoarded}
-                className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-sm font-bold focus:outline-blue-500 disabled:opacity-50"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: '12px',
+                  border: '1px solid #e5e8eb',
+                  backgroundColor: '#ffffff',
+                  fontWeight: 'bold',
+                  fontSize: '14px',
+                  color: '#191f28'
+                }}
               >
                 {SUBWAY_STATIONS[selectedLine].map((st) => (
                   <option key={st} value={st}>{st}역</option>
@@ -194,8 +237,25 @@ export default function Home() {
           <button
             onClick={handleSwapStations}
             disabled={isBoarded}
-            title="출발역과 도착역 반대로 바꾸기"
-            className="absolute right-3 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-blue-600 dark:text-blue-400 shadow-md hover:scale-105 active:scale-95 transition disabled:opacity-30 cursor-pointer"
+            title="출발역과 도착역 상호 전환"
+            style={{
+              position: 'absolute',
+              right: '12px',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              width: '40px',
+              height: '40px',
+              borderRadius: '50%',
+              border: '1px solid #e5e8eb',
+              backgroundColor: '#ffffff',
+              color: '#3182f6',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 4px 10px rgba(0,0,0,0.06)',
+              cursor: isBoarded ? 'not-allowed' : 'pointer',
+              opacity: isBoarded ? 0.3 : 1
+            }}
           >
             <ArrowUpDown className="w-4 h-4" />
           </button>
@@ -205,37 +265,58 @@ export default function Home() {
         {!isBoarded ? (
           <button
             onClick={handleStartBoarding}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl shadow-lg shadow-blue-500/25 flex items-center justify-center gap-2 transition active:scale-[0.98] cursor-pointer"
+            style={{
+              width: '100%',
+              backgroundColor: '#3182f6',
+              color: '#ffffff',
+              fontWeight: 'bold',
+              padding: '16px',
+              borderRadius: '18px',
+              border: 'none',
+              fontSize: '16px',
+              cursor: 'pointer',
+              boxShadow: '0 8px 20px rgba(49, 130, 246, 0.25)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px'
+            }}
           >
             <Play className="w-5 h-5 fill-current" /> 탑승 시작하기
           </button>
         ) : (
-          <div className="space-y-4">
-            <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900/40 p-4 rounded-2xl text-center">
-              <p className="text-xs font-bold text-blue-600 dark:text-blue-400 flex items-center justify-center gap-1.5 mb-1">
-                <ShieldCheck className="w-4 h-4" /> 실시간 센서 감지 중
+          <div className="space-y-3">
+            <div 
+              className="p-4 rounded-2xl text-center"
+              style={{ backgroundColor: '#e8f3ff', border: '1px solid #cce3ff', borderRadius: '16px' }}
+            >
+              <p className="text-xs font-bold text-blue-600 flex items-center justify-center gap-1 mb-1">
+                <ShieldCheck className="w-4 h-4" /> 실시간 센서 주행 감지 중
               </p>
-              <p className="text-sm font-extrabold">[{selectedLine}] {startStation} ➔ {endStation}</p>
+              <p className="text-sm font-extrabold text-blue-900">[{selectedLine}] {startStation} ➔ {endStation}</p>
             </div>
 
             {/* 정차 시뮬레이터 */}
-            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-900/40 p-4 rounded-2xl space-y-2">
+            <div 
+              className="p-4 rounded-2xl space-y-2"
+              style={{ backgroundColor: '#fff8e6', border: '1px solid #ffe8b3', borderRadius: '16px' }}
+            >
               <div className="flex justify-between items-center">
-                <span className="text-xs font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1">
-                  <AlertTriangle className="w-4 h-4 text-amber-500" /> 터널 정차 시뮬레이터
+                <span className="text-xs font-bold text-amber-800 flex items-center gap-1">
+                  <AlertTriangle className="w-4 h-4 text-amber-600" /> 터널 정차 시뮬레이터
                 </span>
                 <input 
                   type="checkbox" 
                   checked={isStationary} 
                   onChange={(e) => setIsStationary(e.target.checked)}
-                  className="w-5 h-5 accent-blue-600 cursor-pointer"
+                  style={{ width: '18px', height: '18px', cursor: 'pointer' }}
                 />
               </div>
               {isStationary && (
-                <div className="text-center pt-2 border-t border-amber-200/60 dark:border-amber-900/40">
-                  <p className="text-xs text-amber-800 dark:text-amber-300">정차 지속: <span className="font-mono font-bold text-sm">{formatTime(delaySeconds)}</span></p>
+                <div className="text-center pt-2 border-t border-amber-200">
+                  <p className="text-xs text-amber-900">정차 지속: <span className="font-mono font-bold">{formatTime(delaySeconds)}</span></p>
                   {isDelayConfirmed && (
-                    <p className="text-xs font-extrabold text-rose-600 dark:text-rose-400 mt-1 animate-bounce">🚨 3분 초과 비정상 지연 확정!</p>
+                    <p className="text-xs font-extrabold text-rose-600 mt-1">🚨 3분 초과 비정상 지연 확정!</p>
                   )}
                 </div>
               )}
@@ -243,7 +324,21 @@ export default function Home() {
 
             <button
               onClick={handleEndBoarding}
-              className="w-full bg-slate-900 dark:bg-slate-100 dark:text-slate-900 text-white font-bold py-4 rounded-2xl shadow-lg flex items-center justify-center gap-2 transition active:scale-[0.98] cursor-pointer"
+              style={{
+                width: '100%',
+                backgroundColor: '#191f28',
+                color: '#ffffff',
+                fontWeight: 'bold',
+                padding: '16px',
+                borderRadius: '18px',
+                border: 'none',
+                fontSize: '16px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px'
+              }}
             >
               <Square className="w-5 h-5 fill-current" /> 하차 완료 (증명서 확인)
             </button>
@@ -251,18 +346,22 @@ export default function Home() {
         )}
 
         {/* Realtime API Monitor */}
-        <div className="pt-4 border-t border-slate-100 dark:border-slate-700/60">
+        <div className="pt-3 border-t border-gray-100">
           <div className="flex justify-between items-center mb-2">
-            <span className="text-xs font-bold text-slate-400">실시간 공공 API ({selectedLine})</span>
-            <button onClick={fetchSubwayData} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1">
+            <span className="text-xs font-bold text-gray-400">실시간 공공 API ({selectedLine})</span>
+            <button onClick={fetchSubwayData} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#8b95a1' }}>
               <RefreshCw className="w-3.5 h-3.5" />
             </button>
           </div>
           <div className="space-y-1.5 max-h-28 overflow-y-auto pr-1">
             {apiData.map((train, idx) => (
-              <div key={idx} className="bg-slate-50 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-700/60 px-3 py-2 rounded-xl text-xs flex justify-between items-center">
-                <span className="font-bold">{train.trainNo}호 열차</span>
-                <span className="text-slate-400 font-medium">{train.statnNm}역 ({train.statnTcv === '1' ? '정차' : '주행'})</span>
+              <div 
+                key={idx} 
+                className="px-3 py-2 text-xs flex justify-between items-center"
+                style={{ backgroundColor: '#f9fafb', borderRadius: '10px', border: '1px solid #f2f4f6' }}
+              >
+                <span className="font-bold text-gray-700">{train.trainNo}호 열차</span>
+                <span className="text-gray-500">{train.statnNm}역 ({train.statnTcv === '1' ? '정차' : '주행'})</span>
               </div>
             ))}
           </div>
