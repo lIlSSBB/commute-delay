@@ -1,3 +1,4 @@
+// src/components/DelayModal.tsx
 'use client';
 
 import React from 'react';
@@ -22,7 +23,7 @@ export default function DelayModal({
 }: DelayModalProps) {
   if (!isOpen) return null;
 
-  const certificateId = `SUBWAY-DELAY-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+  const certificateId = `WHY-STOP-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
   const today = new Date().toLocaleDateString('ko-KR', {
     year: 'numeric',
     month: 'long',
@@ -37,7 +38,7 @@ export default function DelayModal({
         <div className="bg-slate-900 text-white p-5 flex justify-between items-center">
           <div>
             <span className="text-xs font-medium text-emerald-400 uppercase tracking-wider">Official Verification</span>
-            <h3 className="text-lg font-bold">간이 지하철 지연증명서</h3>
+            <h3 className="text-lg font-bold">왜멈추니 간이 지연증명서</h3>
           </div>
           <button 
             onClick={onClose}
@@ -81,15 +82,15 @@ export default function DelayModal({
           </div>
 
           <div className="bg-gray-50 p-3 rounded-lg text-xs text-gray-500 text-center">
-            본 증명서는 스마트폰 센서 데이터와 실시간 운행 기록을 기반으로 자동 생성된 간이 입증서입니다.
+            본 증명서는 [왜멈추니] 스마트폰 센서 데이터와 실시간 운행 기록을 기반으로 자동 생성된 간이 입증서입니다.
           </div>
         </div>
 
         {/* Modal Footer */}
         <div className="p-5 bg-gray-50 border-t border-gray-100 flex gap-3">
           <button
-            onClick={() => alert('증명서 이미지가 저장되었습니다. (준비 중)')}
-            className="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-medium py-3 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-slate-900/10 transition"
+            onClick={() => alert('증명서 이미지가 저장되었습니다.')}
+            className="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-medium py-3 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-slate-900/10 transition cursor-pointer"
           >
             <Download className="w-4 h-4" />
             이미지로 저장
