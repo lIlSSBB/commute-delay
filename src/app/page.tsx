@@ -33,7 +33,6 @@ export default function Home() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [apiData, setApiData] = useState<any[]>([]);
 
-  // 테마 모드 ('light' | 'dark' | 'system')
   const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>('system');
   const [isDark, setIsDark] = useState(false);
 
@@ -61,7 +60,7 @@ export default function Home() {
 
   const lineThemeColor = selectedLine === '2호선' ? '#00A84D' : '#77C4A3';
 
-  // 다음역 계산 로직
+  // 다음역 자동 계산
   const getNextStation = () => {
     const stations = SUBWAY_STATIONS[selectedLine];
     const currentIndex = stations.indexOf(startStation);
@@ -69,10 +68,8 @@ export default function Home() {
 
     if (selectedLine === '2호선') {
       if (direction === '내선') {
-        // 순방향 (마지막 역이면 첫번째 역으로)
         return stations[(currentIndex + 1) % stations.length];
       } else {
-        // 역방향 (첫번째 역이면 마지막 역으로)
         return stations[(currentIndex - 1 + stations.length) % stations.length];
       }
     } else {
@@ -104,9 +101,10 @@ export default function Home() {
     setEndStation(temp);
   };
 
+  // 실시간 API 호출 함수 (방향 및 노선 연동)
   const fetchSubwayData = async () => {
     try {
-      const res = await fetch(`/api/subway?line=${encodeURIComponent(selectedLine)}`);
+      const res = await fetch(`/api/subway?line=${encodeURIComponent(selectedLine)}&direction=${encodeURIComponent(direction)}`);
       const json = await res.json();
       if (json.realtimePosition) {
         setApiData(json.realtimePosition);
@@ -118,7 +116,9 @@ export default function Home() {
 
   useEffect(() => {
     fetchSubwayData();
-  }, [selectedLine]);
+    const interval = setInterval(fetchSubwayData, 15000); // 15초마다 자동 갱신
+    return () => clearInterval(interval);
+  }, [selectedLine, direction]);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -158,7 +158,6 @@ export default function Home() {
     return `${m}분 ${s < 10 ? '0' : ''}${s}초`;
   };
 
-  // 색상 테마 정밀 가이드
   const bgColor = isDark ? '#121212' : '#f2f4f6';
   const cardBg = isDark ? '#1e1e1e' : '#ffffff';
   const subCardBg = isDark ? '#2a2a2a' : '#f8f9fa';
@@ -340,7 +339,7 @@ export default function Home() {
           )}
         </div>
 
-        {/* Station Selection & Next Station Display */}
+        {/* Station Selection & Next Station Badge */}
         <div 
           className="relative p-4 space-y-3 rounded-2xl border"
           style={{ backgroundColor: subCardBg, borderColor }}
@@ -349,7 +348,6 @@ export default function Home() {
             <div>
               <div className="flex justify-between items-center mb-1">
                 <label className="text-xs font-bold block" style={{ color: subTextColor }}>출발역</label>
-                {/* 다음역 표시배지 */}
                 <span 
                   className="text-[11px] font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1"
                   style={{ backgroundColor: isDark ? 'rgba(0,168,77,0.2)' : '#e6f7ed', color: lineThemeColor }}
@@ -470,16 +468,24 @@ export default function Home() {
             </button>
           </div>
           <div className="space-y-1.5 max-h-28 overflow-y-auto pr-1">
-            {apiData.map((train, idx) => (
-              <div 
-                key={idx} 
-                className="px-3 py-2 text-xs flex justify-between items-center rounded-xl border"
-                style={{ backgroundColor: subCardBg, borderColor }}
-              >
-                <span className="font-bold" style={{ color: textColor }}>{train.trainNo}호 열차</span>
-                <span style={{ color: subTextColor }}>{train.statnNm}역 ({train.statnTcv === '1' ? '정차' : '주행'})</span>
+            {apiData.length > 0 ? (
+              apiData.map((train, idx) => (
+                <div 
+                  key={idx} 
+                  className="px-3 py-2 text-xs flex justify-between items-center rounded-xl border"
+                  style={{ backgroundColor: subCardBg, borderColor }}
+                >
+                  <span className="font-bold" style={{ color: textColor }}>{train.trainNo}호 열차</span>
+                  <span style={{ color: subTextColor }}>
+                    {train.statnNm}역 ({train.statnTcv === '1' ? '도착/정차' : train.statnTcv === '2' ? '출발' : '진행중'})
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-3 text-xs" style={{ color: subTextColor }}>
+                현재 운행 중인 실시간 열차 정보가 없습니다.
               </div>
-            ))}
+            )}
           </div>
         </div>
       </div>
