@@ -1,8 +1,7 @@
-// src/components/DelayModal.tsx
 'use client';
 
 import React from 'react';
-import { CheckCircle2, Download, X } from 'lucide-react';
+import { X, CheckCircle, Download } from 'lucide-react';
 
 interface DelayModalProps {
   isOpen: boolean;
@@ -13,90 +12,67 @@ interface DelayModalProps {
   delayMinutes: number;
 }
 
-export default function DelayModal({
-  isOpen,
-  onClose,
-  line,
-  startStation,
-  endStation,
-  delayMinutes,
-}: DelayModalProps) {
+export default function DelayModal({ isOpen, onClose, line, startStation, endStation, delayMinutes }: DelayModalProps) {
   if (!isOpen) return null;
 
-  const certificateId = `WHY-STOP-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
-  const today = new Date().toLocaleDateString('ko-KR', {
+  const issueDate = new Date().toLocaleDateString('ko-KR', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
   });
 
+  const themeColor = line === '2호선' ? '#00A84D' : '#77C4A3';
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-100 animate-in fade-in zoom-in duration-200">
-        
-        {/* Modal Header */}
-        <div className="bg-slate-900 text-white p-5 flex justify-between items-center">
-          <div>
-            <span className="text-xs font-medium text-emerald-400 uppercase tracking-wider">Official Verification</span>
-            <h3 className="text-lg font-bold">왜멈추니 간이 지연증명서</h3>
-          </div>
-          <button 
-            onClick={onClose}
-            className="p-1 rounded-full hover:bg-white/10 text-gray-400 hover:text-white transition"
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+      <div 
+        className="w-full max-w-sm p-6 space-y-5 rounded-3xl shadow-2xl relative transition-colors duration-200"
+        style={{ backgroundColor: 'var(--card-bg)', color: 'var(--text-primary)' }}
+      >
+        <button 
+          onClick={onClose}
+          className="absolute top-5 right-5 p-1.5 rounded-full bg-gray-100 dark:bg-neutral-800 border-none cursor-pointer opacity-60 hover:opacity-100"
+        >
+          <X className="w-4 h-4" />
+        </button>
+
+        <div className="text-center space-y-2 pt-2">
+          <div 
+            className="w-12 h-12 mx-auto rounded-full flex items-center justify-center text-white"
+            style={{ backgroundColor: themeColor }}
           >
-            <X className="w-5 h-5" />
-          </button>
+            <CheckCircle className="w-6 h-6" />
+          </div>
+          <h2 className="text-lg font-extrabold tracking-tight">지연증명서 자동 발급</h2>
+          <p className="text-xs opacity-60">왜멈추니 실시간 센서 감지 완료</p>
         </div>
 
-        {/* Certificate Body */}
-        <div className="p-6 space-y-5 text-gray-800">
-          <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-100 p-3.5 rounded-xl">
-            <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />
-            <div>
-              <p className="text-xs text-emerald-800 font-medium">실시간 센서 및 공공 API 인증 완료</p>
-              <p className="text-sm font-bold text-emerald-900">{line} 터널 내 {delayMinutes}분 정차 확인됨</p>
-            </div>
+        <div className="p-4 rounded-2xl bg-gray-50 dark:bg-neutral-900 border border-gray-100 dark:border-neutral-800 space-y-3 text-sm">
+          <div className="flex justify-between">
+            <span className="opacity-60 text-xs">대상 노선</span>
+            <span className="font-bold" style={{ color: themeColor }}>{line}</span>
           </div>
-
-          <div className="space-y-3 text-sm divide-y divide-gray-100">
-            <div className="flex justify-between pt-2">
-              <span className="text-gray-500">문서 번호</span>
-              <span className="font-mono font-medium text-gray-700">{certificateId}</span>
-            </div>
-            <div className="flex justify-between pt-3">
-              <span className="text-gray-500">발급 일시</span>
-              <span className="font-medium text-gray-700">{today}</span>
-            </div>
-            <div className="flex justify-between pt-3">
-              <span className="text-gray-500">이용 노선</span>
-              <span className="font-bold text-slate-900">{line}</span>
-            </div>
-            <div className="flex justify-between pt-3">
-              <span className="text-gray-500">탑승 구간</span>
-              <span className="font-semibold text-slate-900">{startStation} ➔ {endStation}</span>
-            </div>
-            <div className="flex justify-between pt-3">
-              <span className="text-gray-500">측정 지연 시간</span>
-              <span className="font-bold text-rose-600">+{delayMinutes}분 초과 정차</span>
-            </div>
+          <div className="flex justify-between">
+            <span className="opacity-60 text-xs">이동 구간</span>
+            <span className="font-bold">{startStation} ➔ {endStation}</span>
           </div>
-
-          <div className="bg-gray-50 p-3 rounded-lg text-xs text-gray-500 text-center">
-            본 증명서는 [왜멈추니] 스마트폰 센서 데이터와 실시간 운행 기록을 기반으로 자동 생성된 간이 입증서입니다.
+          <div className="flex justify-between">
+            <span className="opacity-60 text-xs">터널 정차 시간</span>
+            <span className="font-bold text-rose-500">{delayMinutes}분 이상 지연</span>
+          </div>
+          <div className="flex justify-between pt-2 border-t border-gray-200 dark:border-neutral-800">
+            <span className="opacity-60 text-xs">발급 일자</span>
+            <span className="font-medium text-xs">{issueDate}</span>
           </div>
         </div>
 
-        {/* Modal Footer */}
-        <div className="p-5 bg-gray-50 border-t border-gray-100 flex gap-3">
-          <button
-            onClick={() => alert('증명서 이미지가 저장되었습니다.')}
-            className="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-medium py-3 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-slate-900/10 transition cursor-pointer"
-          >
-            <Download className="w-4 h-4" />
-            이미지로 저장
-          </button>
-        </div>
-
+        <button
+          onClick={() => alert('증명서 이미지가 저장되었습니다!')}
+          className="w-full py-4 rounded-2xl text-white font-bold border-none text-sm cursor-pointer shadow-md flex items-center justify-center gap-2"
+          style={{ backgroundColor: themeColor }}
+        >
+          <Download className="w-4 h-4" /> 지연증명서 저장하기
+        </button>
       </div>
     </div>
   );
