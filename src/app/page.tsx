@@ -1,10 +1,9 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Train, Play, Square, AlertTriangle, RefreshCw, ArrowUpDown, ShieldCheck, Sun, Moon, Monitor, ArrowRight, Navigation, Cpu } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Train, Play, Square, AlertTriangle, RefreshCw, ArrowUpDown, ShieldCheck, Sun, Moon, Monitor, ArrowRight, Navigation, Cpu, Settings } from 'lucide-react';
 import DelayModal from '@/components/DelayModal';
 
-// 주요 역 GPS 좌표 데이터셋 (자동 탑승/하차 감지용)
 const STATION_COORDINATES: Record<string, { lat: number; lng: number }> = {
   "강남": { lat: 37.4979, lng: 127.0276 },
   "홍대입구": { lat: 37.5575, lng: 126.9245 },
@@ -31,9 +30,8 @@ const SUBWAY_STATIONS: Record<string, string[]> = {
   ]
 };
 
-// 두 좌표 간 거리 계산 (단위: km)
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
-  const R = 6371; // 지구 반지름
+  const R = 6371;
   const dLat = (lat2 - lat1) * (Math.PI / 180);
   const dLon = (lon2 - lon1) * (Math.PI / 180);
   const a = 
@@ -51,11 +49,13 @@ export default function Home() {
   const [startStation, setStartStation] = useState('강남');
   const [endStation, setEndStation] = useState('홍대입구');
   
-  // 센서 및 자동 감지 상태
+  // 관리자 모드 및 Mock 시뮬레이터 상태
+  const [isAdminModeOpen, setIsAdminModeOpen] = useState(false);
+  const [isMockSimulator, setIsMockSimulator] = useState(true);
+
   const [isStationary, setIsStationary] = useState(false);
-  const [sensorStatus, setSensorStatus] = useState<string>('센서 대기 중');
-  const [userSpeed, setUserSpeed] = useState<number | null>(null);
-  const [gpsLocationMsg, setGpsLocationMsg] = useState<string>('위치 추적 오프');
+  const [sensorStatus, setSensorStatus] = useState<string>('시뮬레이터 대기 중');
+  const [gpsLocationMsg, setGpsLocationMsg] = useState<string>('위치 추적 대기');
 
   const [delaySeconds, setDelaySeconds] = useState(0);
   const [isDelayConfirmed, setIsDelayConfirmed] = useState(false);
@@ -65,7 +65,6 @@ export default function Home() {
   const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>('system');
   const [isDark, setIsDark] = useState(false);
 
-  // 다크/라이트 테마 제어
   useEffect(() => {
     const root = document.documentElement;
     const updateTheme = (darkMode: boolean) => {
@@ -90,7 +89,6 @@ export default function Home() {
 
   const lineThemeColor = selectedLine === '2호선' ? '#00A84D' : '#77C4A3';
 
-  // 다음역 계산
   const getNextStation = () => {
     const stations = SUBWAY_STATIONS[selectedLine];
     const currentIndex = stations.indexOf(startStation);
@@ -107,7 +105,6 @@ export default function Home() {
     }
   };
 
-  // 1. 실시간 공공 API 호출 기능
   const fetchSubwayData = async () => {
     try {
       const res = await fetch(`/api/subway?line=${encodeURIComponent(selectedLine)}&direction=${encodeURIComponent(direction)}`);
@@ -122,24 +119,21 @@ export default function Home() {
 
   useEffect(() => {
     fetchSubwayData();
-    const interval = setInterval(fetchSubwayData, 12000); // 12초마다 실시간 갱신
+    const interval = setInterval(fetchSubwayData, 12000);
     return () => clearInterval(interval);
   }, [selectedLine, direction]);
 
-  // 2. 디바이스 센서 (모션 + GPS 속도) 기반 정차/출발 자동 감지
   useEffect(() => {
-    if (!isBoarded) return;
+    if (!isBoarded || isMockSimulator) return;
 
-    // A. Geolocation 속도 기반 감지
     let watchId: number;
     if ('geolocation' in navigator) {
       watchId = navigator.geolocation.watchPosition(
         (pos) => {
-          const speed = pos.coords.speed; // m/s
+          const speed = pos.coords.speed;
           if (speed !== null) {
             const kmh = speed * 3.6;
-            setUserSpeed(Math.round(kmh));
-            if (kmh < 3) { // 3km/h 미만 정차 판단
+            if (kmh < 3) {
               setIsStationary(true);
               setSensorStatus('센서: 터널 정차 감지됨 (0 km/h)');
             } else {
@@ -148,53 +142,31 @@ export default function Home() {
             }
           }
 
-          // B. GPS 위치 기반 출발역/도착역 자동 매칭
           const { latitude, longitude } = pos.coords;
           const startCoords = STATION_COORDINATES[startStation];
           const endCoords = STATION_COORDINATES[endStation];
 
-          if (startCoords) {
-            const distToStart = calculateDistance(latitude, longitude, startCoords.lat, startCoords.lng);
-            if (distToStart < 0.3) {
-              setGpsLocationMsg(`출발역 [${startStation}역] 인근 탑승 확인됨`);
-            }
+          if (startCoords && calculateDistance(latitude, longitude, startCoords.lat, startCoords.lng) < 0.3) {
+            setGpsLocationMsg(`출발역 [${startStation}역] 탑승 완료`);
           }
-
-          if (endCoords) {
-            const distToEnd = calculateDistance(latitude, longitude, endCoords.lat, endCoords.lng);
-            if (distToEnd < 0.3) {
-              setGpsLocationMsg(`도착역 [${endStation}역] 접근 중 (자동 하차 준비)`);
-            }
+          if (endCoords && calculateDistance(latitude, longitude, endCoords.lat, endCoords.lng) < 0.3) {
+            setGpsLocationMsg(`도착역 [${endStation}역] 접근 중 (하차 준비)`);
           }
         },
-        (err) => console.warn('GPS Error:', err),
+        (err) => {
+          console.warn('GPS Error:', err);
+          setGpsLocationMsg('GPS 신호 수신 불가 (관리자 모드 추천)');
+        },
         { enableHighAccuracy: true, maximumAge: 1000, timeout: 5000 }
       );
     }
 
-    // C. 가속도계 센서 기반 보조 감지
-    const handleMotion = (event: DeviceMotionEvent) => {
-      const acc = event.acceleration;
-      if (acc && acc.x !== null) {
-        const totalAcc = Math.sqrt((acc.x || 0) ** 2 + (acc.y || 0) ** 2 + (acc.z || 0) ** 2);
-        if (totalAcc < 0.2 && userSpeed === null) {
-          setIsStationary(true);
-          setSensorStatus('모션 센서: 정지 상태 감지');
-        }
-      }
-    };
-
-    if (typeof window !== 'undefined' && 'DeviceMotionEvent' in window) {
-      window.addEventListener('devicemotion', handleMotion);
-    }
-
     return () => {
       if (watchId) navigator.geolocation.clearWatch(watchId);
-      if (typeof window !== 'undefined') window.removeEventListener('devicemotion', handleMotion);
     };
-  }, [isBoarded, startStation, endStation, userSpeed]);
+  }, [isBoarded, isMockSimulator, startStation, endStation]);
 
-  // 지연 타이머 로직
+  // 지연 타이머 (기준: 3분 이상 정차 시 확정)
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (isBoarded && isStationary) {
@@ -237,8 +209,13 @@ export default function Home() {
     setIsBoarded(true);
     setIsDelayConfirmed(false);
     setDelaySeconds(0);
-    setSensorStatus('센서 추적 개시');
-    setGpsLocationMsg('실시간 GPS 위치 추적 중');
+    if (isMockSimulator) {
+      setSensorStatus('관리자 모드 (Mock 시뮬레이션 활성)');
+      setGpsLocationMsg(`[가상GPS] ${startStation}역 출발 완료`);
+    } else {
+      setSensorStatus('실제 센서 추적 개시');
+      setGpsLocationMsg('실시간 GPS 위치 수신 대기 중...');
+    }
   };
 
   const handleEndBoarding = () => {
@@ -268,14 +245,14 @@ export default function Home() {
       style={{ backgroundColor: bgColor, color: textColor }}
     >
       <div 
-        className="w-full max-w-md p-6 space-y-5 transition-colors duration-200 shadow-xl"
+        className="w-full max-w-md p-6 space-y-5 transition-colors duration-200 shadow-xl relative"
         style={{ 
           backgroundColor: cardBg, 
           borderRadius: '24px', 
           boxShadow: isDark ? '0 10px 30px rgba(0,0,0,0.5)' : '0 10px 30px rgba(0,0,0,0.08)' 
         }}
       >
-        {/* Header & Theme Switcher */}
+        {/* Header & Admin Mode Button */}
         <div className="flex items-center justify-between pb-3 border-b" style={{ borderColor }}>
           <div className="flex items-center gap-2.5">
             <div 
@@ -290,78 +267,68 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="flex items-center gap-1 p-1 rounded-xl" style={{ backgroundColor: subCardBg }}>
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => setThemeMode('light')}
-              style={{
-                padding: '6px',
-                borderRadius: '8px',
-                border: 'none',
-                cursor: 'pointer',
-                backgroundColor: themeMode === 'light' ? cardBg : 'transparent',
-                color: themeMode === 'light' ? textColor : subTextColor
-              }}
+              onClick={() => setIsAdminModeOpen(!isAdminModeOpen)}
+              title="관리자 모드 열기"
+              className="p-2 rounded-xl border flex items-center gap-1 text-xs font-bold cursor-pointer"
+              style={{ backgroundColor: subCardBg, borderColor, color: isMockSimulator ? '#f59e0b' : '#10b981' }}
             >
-              <Sun className="w-3.5 h-3.5" />
+              <Settings className="w-3.5 h-3.5" /> 관리자 모드
             </button>
-            <button
-              onClick={() => setThemeMode('system')}
-              style={{
-                padding: '6px',
-                borderRadius: '8px',
-                border: 'none',
-                cursor: 'pointer',
-                backgroundColor: themeMode === 'system' ? cardBg : 'transparent',
-                color: themeMode === 'system' ? textColor : subTextColor
-              }}
-            >
-              <Monitor className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => setThemeMode('dark')}
-              style={{
-                padding: '6px',
-                borderRadius: '8px',
-                border: 'none',
-                cursor: 'pointer',
-                backgroundColor: themeMode === 'dark' ? cardBg : 'transparent',
-                color: themeMode === 'dark' ? textColor : subTextColor
-              }}
-            >
-              <Moon className="w-3.5 h-3.5" />
-            </button>
+
+            <div className="flex items-center gap-1 p-1 rounded-xl" style={{ backgroundColor: subCardBg }}>
+              <button
+                onClick={() => setThemeMode('light')}
+                style={{ padding: '6px', borderRadius: '8px', border: 'none', cursor: 'pointer', backgroundColor: themeMode === 'light' ? cardBg : 'transparent', color: themeMode === 'light' ? textColor : subTextColor }}
+              >
+                <Sun className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => setThemeMode('dark')}
+                style={{ padding: '6px', borderRadius: '8px', border: 'none', cursor: 'pointer', backgroundColor: themeMode === 'dark' ? cardBg : 'transparent', color: themeMode === 'dark' ? textColor : subTextColor }}
+              >
+                <Moon className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         </div>
+
+        {/* 🛠️ 관리자 모드 패널 */}
+        {isAdminModeOpen && (
+          <div className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 space-y-2 text-xs">
+            <div className="flex justify-between items-center font-bold text-amber-800 dark:text-amber-400">
+              <span>🛠️ 관리자 모드 설정</span>
+              <span className="text-[10px] bg-amber-200 dark:bg-amber-900 px-2 py-0.5 rounded-full">시연/테스트용</span>
+            </div>
+            <div className="flex items-center justify-between pt-1 border-t border-amber-200 dark:border-amber-900/50">
+              <span className="text-amber-900 dark:text-amber-300">Mock 시뮬레이터 사용</span>
+              <input 
+                type="checkbox" 
+                checked={isMockSimulator} 
+                onChange={(e) => setIsMockSimulator(e.target.checked)}
+                className="w-4 h-4 cursor-pointer accent-amber-600"
+              />
+            </div>
+            <p className="text-[11px] opacity-70 text-amber-900 dark:text-amber-400">
+              * 활성화 시 실내에서도 버튼 조작으로 가상 GPS 및 정차 시뮬레이션이 가능합니다.
+            </p>
+          </div>
+        )}
 
         {/* Line Tabs */}
         <div className="grid grid-cols-2 p-1.5 gap-1 rounded-2xl" style={{ backgroundColor: subCardBg }}>
           <button
             onClick={() => handleLineChange('2호선')}
             disabled={isBoarded}
-            style={{
-              padding: '10px 0',
-              borderRadius: '12px',
-              border: 'none',
-              fontWeight: 'bold',
-              fontSize: '13px',
-              backgroundColor: selectedLine === '2호선' ? cardBg : 'transparent',
-              color: selectedLine === '2호선' ? '#00A84D' : subTextColor
-            }}
+            style={{ padding: '10px 0', borderRadius: '12px', border: 'none', fontWeight: 'bold', fontSize: '13px', backgroundColor: selectedLine === '2호선' ? cardBg : 'transparent', color: selectedLine === '2호선' ? '#00A84D' : subTextColor }}
           >
             2호선
           </button>
           <button
             onClick={() => handleLineChange('경의중앙선')}
             disabled={isBoarded}
-            style={{
-              padding: '10px 0',
-              borderRadius: '12px',
-              border: 'none',
-              fontWeight: 'bold',
-              fontSize: '13px',
-              backgroundColor: selectedLine === '경의중앙선' ? cardBg : 'transparent',
-              color: selectedLine === '경의중앙선' ? '#77C4A3' : subTextColor
-            }}
+            style={{ padding: '10px 0', borderRadius: '12px', border: 'none', fontWeight: 'bold', fontSize: '13px', backgroundColor: selectedLine === '경의중앙선' ? cardBg : 'transparent', color: selectedLine === '경의중앙선' ? '#77C4A3' : subTextColor }}
           >
             경의중앙선
           </button>
@@ -375,11 +342,7 @@ export default function Home() {
                 onClick={() => setDirection('내선')}
                 disabled={isBoarded}
                 className="flex-1 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer"
-                style={{
-                  border: `1.5px solid ${direction === '내선' ? '#00A84D' : borderColor}`,
-                  backgroundColor: direction === '내선' ? (isDark ? 'rgba(0,168,77,0.15)' : '#e6f7ed') : cardBg,
-                  color: direction === '내선' ? '#00A84D' : subTextColor
-                }}
+                style={{ border: `1.5px solid ${direction === '내선' ? '#00A84D' : borderColor}`, backgroundColor: direction === '내선' ? (isDark ? 'rgba(0,168,77,0.15)' : '#e6f7ed') : cardBg, color: direction === '내선' ? '#00A84D' : subTextColor }}
               >
                 🔄 2호선 내선순환
               </button>
@@ -387,11 +350,7 @@ export default function Home() {
                 onClick={() => setDirection('외선')}
                 disabled={isBoarded}
                 className="flex-1 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer"
-                style={{
-                  border: `1.5px solid ${direction === '외선' ? '#00A84D' : borderColor}`,
-                  backgroundColor: direction === '외선' ? (isDark ? 'rgba(0,168,77,0.15)' : '#e6f7ed') : cardBg,
-                  color: direction === '외선' ? '#00A84D' : subTextColor
-                }}
+                style={{ border: `1.5px solid ${direction === '외선' ? '#00A84D' : borderColor}`, backgroundColor: direction === '외선' ? (isDark ? 'rgba(0,168,77,0.15)' : '#e6f7ed') : cardBg, color: direction === '외선' ? '#00A84D' : subTextColor }}
               >
                 🔃 2호선 외선순환
               </button>
@@ -402,11 +361,7 @@ export default function Home() {
                 onClick={() => setDirection('상행')}
                 disabled={isBoarded}
                 className="flex-1 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer"
-                style={{
-                  border: `1.5px solid ${direction === '상행' ? '#77C4A3' : borderColor}`,
-                  backgroundColor: direction === '상행' ? (isDark ? 'rgba(119,196,163,0.15)' : '#edf8f3') : cardBg,
-                  color: direction === '상행' ? '#77C4A3' : subTextColor
-                }}
+                style={{ border: `1.5px solid ${direction === '상행' ? '#77C4A3' : borderColor}`, backgroundColor: direction === '상행' ? (isDark ? 'rgba(119,196,163,0.15)' : '#edf8f3') : cardBg, color: direction === '상행' ? '#77C4A3' : subTextColor }}
               >
                 ⬆️ 경의중앙선 상행
               </button>
@@ -414,11 +369,7 @@ export default function Home() {
                 onClick={() => setDirection('하행')}
                 disabled={isBoarded}
                 className="flex-1 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer"
-                style={{
-                  border: `1.5px solid ${direction === '하행' ? '#77C4A3' : borderColor}`,
-                  backgroundColor: direction === '하행' ? (isDark ? 'rgba(119,196,163,0.15)' : '#edf8f3') : cardBg,
-                  color: direction === '하행' ? '#77C4A3' : subTextColor
-                }}
+                style={{ border: `1.5px solid ${direction === '하행' ? '#77C4A3' : borderColor}`, backgroundColor: direction === '하행' ? (isDark ? 'rgba(119,196,163,0.15)' : '#edf8f3') : cardBg, color: direction === '하행' ? '#77C4A3' : subTextColor }}
               >
                 ⬇️ 경의중앙선 하행
               </button>
@@ -478,28 +429,24 @@ export default function Home() {
           </button>
         </div>
 
-        {/* Boarding & Automatic Sensor Dashboard */}
+        {/* Boarding & Status Controls */}
         {!isBoarded ? (
           <button
             onClick={handleStartBoarding}
             className="w-full text-white font-bold py-4 rounded-2xl border-none text-base cursor-pointer shadow-lg flex items-center justify-center gap-2"
             style={{ backgroundColor: lineThemeColor }}
           >
-            <Play className="w-5 h-5 fill-current" /> 자동 탑승 감지 시작 ({direction})
+            <Play className="w-5 h-5 fill-current" /> {isMockSimulator ? '모의 탑승 시작 (관리자 모드)' : '실시간 GPS 탑승 시작'} ({direction})
           </button>
         ) : (
           <div className="space-y-3">
-            {/* GPS 및 자동 감지 상태 표시 */}
             <div 
               className="p-4 rounded-2xl border space-y-1.5 text-xs"
-              style={{ 
-                backgroundColor: isDark ? 'rgba(0,168,77,0.15)' : '#e6f7ed', 
-                borderColor: isDark ? 'rgba(0,168,77,0.3)' : '#b3e6c8' 
-              }}
+              style={{ backgroundColor: isDark ? 'rgba(0,168,77,0.15)' : '#e6f7ed', borderColor: isDark ? 'rgba(0,168,77,0.3)' : '#b3e6c8' }}
             >
               <div className="flex items-center justify-between font-bold" style={{ color: lineThemeColor }}>
                 <span className="flex items-center gap-1"><Cpu className="w-4 h-4" /> {sensorStatus}</span>
-                <span className="flex items-center gap-1"><Navigation className="w-3.5 h-3.5" /> GPS 연결됨</span>
+                <span className="flex items-center gap-1"><Navigation className="w-3.5 h-3.5" /> {isMockSimulator ? '시뮬레이터 활성' : 'GPS 연결됨'}</span>
               </div>
               <p className="font-medium" style={{ color: textColor }}>{gpsLocationMsg}</p>
               <p className="font-extrabold text-sm pt-1 border-t" style={{ borderColor: 'rgba(0,0,0,0.05)', color: textColor }}>
@@ -507,30 +454,29 @@ export default function Home() {
               </p>
             </div>
 
-            {/* 정차 시뮬레이터 및 자동 타이머 */}
+            {/* Tunnel Stop Simulator (지연 기준: 3분 이상) */}
             <div 
               className="p-4 space-y-2 rounded-2xl border"
-              style={{ 
-                backgroundColor: isDark ? 'rgba(245,158,11,0.15)' : '#fff8e6', 
-                borderColor: isDark ? 'rgba(245,158,11,0.3)' : '#ffe8b3' 
-              }}
+              style={{ backgroundColor: isDark ? 'rgba(245,158,11,0.15)' : '#fff8e6', borderColor: isDark ? 'rgba(245,158,11,0.3)' : '#ffe8b3' }}
             >
               <div className="flex justify-between items-center">
                 <span className="text-xs font-bold flex items-center gap-1 text-amber-600 dark:text-amber-400">
-                  <AlertTriangle className="w-4 h-4" /> 수동 테스트 정차 토글
+                  <AlertTriangle className="w-4 h-4" /> 터널 정차 시뮬레이터 (3분 이상 지연)
                 </span>
                 <input 
                   type="checkbox" 
                   checked={isStationary} 
                   onChange={(e) => setIsStationary(e.target.checked)}
-                  className="w-4 h-4 cursor-pointer"
+                  className="w-4 h-4 cursor-pointer accent-amber-600"
                 />
               </div>
               {isStationary && (
                 <div className="text-center pt-2 border-t border-amber-200 dark:border-amber-900/50">
                   <p className="text-xs text-amber-800 dark:text-amber-300">정차 감지 지속: <span className="font-mono font-bold">{formatTime(delaySeconds)}</span></p>
-                  {isDelayConfirmed && (
-                    <p className="text-xs font-extrabold text-rose-600 mt-1">🚨 3분 초과 비정상 지연 확정!</p>
+                  {isDelayConfirmed ? (
+                    <p className="text-xs font-extrabold text-rose-600 mt-1">🚨 3분 초과 비정상 지연 확정! (증명서 발급 가능)</p>
+                  ) : (
+                    <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-1">⏳ 증명서 발급 기준(3분)까지 남은 시간...</p>
                   )}
                 </div>
               )}
