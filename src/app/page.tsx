@@ -1,8 +1,19 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Train, Play, Square, AlertTriangle, RefreshCw, ArrowUpDown, ShieldCheck, Sun, Moon, Monitor, ArrowRight } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Train, Play, Square, AlertTriangle, RefreshCw, ArrowUpDown, ShieldCheck, Sun, Moon, Monitor, ArrowRight, Navigation, Cpu } from 'lucide-react';
 import DelayModal from '@/components/DelayModal';
+
+// 주요 역 GPS 좌표 데이터셋 (자동 탑승/하차 감지용)
+const STATION_COORDINATES: Record<string, { lat: number; lng: number }> = {
+  "강남": { lat: 37.4979, lng: 127.0276 },
+  "홍대입구": { lat: 37.5575, lng: 126.9245 },
+  "신도림": { lat: 37.5087, lng: 126.8912 },
+  "삼성": { lat: 37.5088, lng: 127.0632 },
+  "디지털미디어시티": { lat: 37.5767, lng: 126.9011 },
+  "공덕": { lat: 37.5432, lng: 126.9515 },
+  "왕십리": { lat: 37.5612, lng: 127.0371 }
+};
 
 const SUBWAY_STATIONS: Record<string, string[]> = {
   "2호선": [
@@ -20,6 +31,19 @@ const SUBWAY_STATIONS: Record<string, string[]> = {
   ]
 };
 
+// 두 좌표 간 거리 계산 (단위: km)
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371; // 지구 반지름
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 export default function Home() {
   const [selectedLine, setSelectedLine] = useState<'2호선' | '경의중앙선'>('2호선');
   const [direction, setDirection] = useState<'내선' | '외선' | '상행' | '하행'>('내선');
@@ -27,7 +51,12 @@ export default function Home() {
   const [startStation, setStartStation] = useState('강남');
   const [endStation, setEndStation] = useState('홍대입구');
   
+  // 센서 및 자동 감지 상태
   const [isStationary, setIsStationary] = useState(false);
+  const [sensorStatus, setSensorStatus] = useState<string>('센서 대기 중');
+  const [userSpeed, setUserSpeed] = useState<number | null>(null);
+  const [gpsLocationMsg, setGpsLocationMsg] = useState<string>('위치 추적 오프');
+
   const [delaySeconds, setDelaySeconds] = useState(0);
   const [isDelayConfirmed, setIsDelayConfirmed] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -36,6 +65,7 @@ export default function Home() {
   const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>('system');
   const [isDark, setIsDark] = useState(false);
 
+  // 다크/라이트 테마 제어
   useEffect(() => {
     const root = document.documentElement;
     const updateTheme = (darkMode: boolean) => {
@@ -60,26 +90,128 @@ export default function Home() {
 
   const lineThemeColor = selectedLine === '2호선' ? '#00A84D' : '#77C4A3';
 
-  // 다음역 자동 계산
+  // 다음역 계산
   const getNextStation = () => {
     const stations = SUBWAY_STATIONS[selectedLine];
     const currentIndex = stations.indexOf(startStation);
     if (currentIndex === -1) return '';
 
     if (selectedLine === '2호선') {
-      if (direction === '내선') {
-        return stations[(currentIndex + 1) % stations.length];
-      } else {
-        return stations[(currentIndex - 1 + stations.length) % stations.length];
-      }
+      return direction === '내선' 
+        ? stations[(currentIndex + 1) % stations.length] 
+        : stations[(currentIndex - 1 + stations.length) % stations.length];
     } else {
-      if (direction === '상행') {
-        return currentIndex > 0 ? stations[currentIndex - 1] : '종착역';
-      } else {
-        return currentIndex < stations.length - 1 ? stations[currentIndex + 1] : '종착역';
-      }
+      return direction === '상행' 
+        ? (currentIndex > 0 ? stations[currentIndex - 1] : '종착역')
+        : (currentIndex < stations.length - 1 ? stations[currentIndex + 1] : '종착역');
     }
   };
+
+  // 1. 실시간 공공 API 호출 기능
+  const fetchSubwayData = async () => {
+    try {
+      const res = await fetch(`/api/subway?line=${encodeURIComponent(selectedLine)}&direction=${encodeURIComponent(direction)}`);
+      const json = await res.json();
+      if (json.realtimePosition) {
+        setApiData(json.realtimePosition);
+      }
+    } catch (e) {
+      console.error('API Fetch Error:', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchSubwayData();
+    const interval = setInterval(fetchSubwayData, 12000); // 12초마다 실시간 갱신
+    return () => clearInterval(interval);
+  }, [selectedLine, direction]);
+
+  // 2. 디바이스 센서 (모션 + GPS 속도) 기반 정차/출발 자동 감지
+  useEffect(() => {
+    if (!isBoarded) return;
+
+    // A. Geolocation 속도 기반 감지
+    let watchId: number;
+    if ('geolocation' in navigator) {
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const speed = pos.coords.speed; // m/s
+          if (speed !== null) {
+            const kmh = speed * 3.6;
+            setUserSpeed(Math.round(kmh));
+            if (kmh < 3) { // 3km/h 미만 정차 판단
+              setIsStationary(true);
+              setSensorStatus('센서: 터널 정차 감지됨 (0 km/h)');
+            } else {
+              setIsStationary(false);
+              setSensorStatus(`센서: 주행 중 (${Math.round(kmh)} km/h)`);
+            }
+          }
+
+          // B. GPS 위치 기반 출발역/도착역 자동 매칭
+          const { latitude, longitude } = pos.coords;
+          const startCoords = STATION_COORDINATES[startStation];
+          const endCoords = STATION_COORDINATES[endStation];
+
+          if (startCoords) {
+            const distToStart = calculateDistance(latitude, longitude, startCoords.lat, startCoords.lng);
+            if (distToStart < 0.3) {
+              setGpsLocationMsg(`출발역 [${startStation}역] 인근 탑승 확인됨`);
+            }
+          }
+
+          if (endCoords) {
+            const distToEnd = calculateDistance(latitude, longitude, endCoords.lat, endCoords.lng);
+            if (distToEnd < 0.3) {
+              setGpsLocationMsg(`도착역 [${endStation}역] 접근 중 (자동 하차 준비)`);
+            }
+          }
+        },
+        (err) => console.warn('GPS Error:', err),
+        { enableHighAccuracy: true, maximumAge: 1000, timeout: 5000 }
+      );
+    }
+
+    // C. 가속도계 센서 기반 보조 감지
+    const handleMotion = (event: DeviceMotionEvent) => {
+      const acc = event.acceleration;
+      if (acc && acc.x !== null) {
+        const totalAcc = Math.sqrt((acc.x || 0) ** 2 + (acc.y || 0) ** 2 + (acc.z || 0) ** 2);
+        if (totalAcc < 0.2 && userSpeed === null) {
+          setIsStationary(true);
+          setSensorStatus('모션 센서: 정지 상태 감지');
+        }
+      }
+    };
+
+    if (typeof window !== 'undefined' && 'DeviceMotionEvent' in window) {
+      window.addEventListener('devicemotion', handleMotion);
+    }
+
+    return () => {
+      if (watchId) navigator.geolocation.clearWatch(watchId);
+      if (typeof window !== 'undefined') window.removeEventListener('devicemotion', handleMotion);
+    };
+  }, [isBoarded, startStation, endStation, userSpeed]);
+
+  // 지연 타이머 로직
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (isBoarded && isStationary) {
+      timer = setInterval(() => {
+        setDelaySeconds((prev) => {
+          const next = prev + 1;
+          if (next >= 180 && !isDelayConfirmed) {
+            setIsDelayConfirmed(true);
+          }
+          return next;
+        });
+      }, 1000);
+    } else {
+      setDelaySeconds(0);
+    }
+    return () => clearInterval(timer);
+  }, [isBoarded, isStationary, isDelayConfirmed]);
 
   const handleLineChange = (line: '2호선' | '경의중앙선') => {
     setSelectedLine(line);
@@ -101,47 +233,12 @@ export default function Home() {
     setEndStation(temp);
   };
 
-  // 실시간 API 호출 함수 (방향 및 노선 연동)
-  const fetchSubwayData = async () => {
-    try {
-      const res = await fetch(`/api/subway?line=${encodeURIComponent(selectedLine)}&direction=${encodeURIComponent(direction)}`);
-      const json = await res.json();
-      if (json.realtimePosition) {
-        setApiData(json.realtimePosition);
-      }
-    } catch (e) {
-      console.error('API Fetch Error:', e);
-    }
-  };
-
-  useEffect(() => {
-    fetchSubwayData();
-    const interval = setInterval(fetchSubwayData, 15000); // 15초마다 자동 갱신
-    return () => clearInterval(interval);
-  }, [selectedLine, direction]);
-
-  useEffect(() => {
-    let timer: NodeJS.Timeout;
-    if (isBoarded && isStationary) {
-      timer = setInterval(() => {
-        setDelaySeconds((prev) => {
-          const next = prev + 1;
-          if (next >= 180 && !isDelayConfirmed) {
-            setIsDelayConfirmed(true);
-          }
-          return next;
-        });
-      }, 1000);
-    } else {
-      setDelaySeconds(0);
-    }
-    return () => clearInterval(timer);
-  }, [isBoarded, isStationary, isDelayConfirmed]);
-
   const handleStartBoarding = () => {
     setIsBoarded(true);
     setIsDelayConfirmed(false);
     setDelaySeconds(0);
+    setSensorStatus('센서 추적 개시');
+    setGpsLocationMsg('실시간 GPS 위치 추적 중');
   };
 
   const handleEndBoarding = () => {
@@ -196,45 +293,39 @@ export default function Home() {
           <div className="flex items-center gap-1 p-1 rounded-xl" style={{ backgroundColor: subCardBg }}>
             <button
               onClick={() => setThemeMode('light')}
-              title="라이트 모드"
               style={{
                 padding: '6px',
                 borderRadius: '8px',
                 border: 'none',
                 cursor: 'pointer',
                 backgroundColor: themeMode === 'light' ? cardBg : 'transparent',
-                color: themeMode === 'light' ? textColor : subTextColor,
-                boxShadow: themeMode === 'light' ? '0 2px 6px rgba(0,0,0,0.1)' : 'none'
+                color: themeMode === 'light' ? textColor : subTextColor
               }}
             >
               <Sun className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => setThemeMode('system')}
-              title="시스템 설정 반영"
               style={{
                 padding: '6px',
                 borderRadius: '8px',
                 border: 'none',
                 cursor: 'pointer',
                 backgroundColor: themeMode === 'system' ? cardBg : 'transparent',
-                color: themeMode === 'system' ? textColor : subTextColor,
-                boxShadow: themeMode === 'system' ? '0 2px 6px rgba(0,0,0,0.1)' : 'none'
+                color: themeMode === 'system' ? textColor : subTextColor
               }}
             >
               <Monitor className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => setThemeMode('dark')}
-              title="다크 모드"
               style={{
                 padding: '6px',
                 borderRadius: '8px',
                 border: 'none',
                 cursor: 'pointer',
                 backgroundColor: themeMode === 'dark' ? cardBg : 'transparent',
-                color: themeMode === 'dark' ? textColor : subTextColor,
-                boxShadow: themeMode === 'dark' ? '0 2px 6px rgba(0,0,0,0.1)' : 'none'
+                color: themeMode === 'dark' ? textColor : subTextColor
               }}
             >
               <Moon className="w-3.5 h-3.5" />
@@ -253,10 +344,8 @@ export default function Home() {
               border: 'none',
               fontWeight: 'bold',
               fontSize: '13px',
-              cursor: isBoarded ? 'not-allowed' : 'pointer',
               backgroundColor: selectedLine === '2호선' ? cardBg : 'transparent',
-              color: selectedLine === '2호선' ? '#00A84D' : subTextColor,
-              boxShadow: selectedLine === '2호선' ? '0 2px 8px rgba(0,0,0,0.08)' : 'none'
+              color: selectedLine === '2호선' ? '#00A84D' : subTextColor
             }}
           >
             2호선
@@ -270,10 +359,8 @@ export default function Home() {
               border: 'none',
               fontWeight: 'bold',
               fontSize: '13px',
-              cursor: isBoarded ? 'not-allowed' : 'pointer',
               backgroundColor: selectedLine === '경의중앙선' ? cardBg : 'transparent',
-              color: selectedLine === '경의중앙선' ? '#77C4A3' : subTextColor,
-              boxShadow: selectedLine === '경의중앙선' ? '0 2px 8px rgba(0,0,0,0.08)' : 'none'
+              color: selectedLine === '경의중앙선' ? '#77C4A3' : subTextColor
             }}
           >
             경의중앙선
@@ -339,11 +426,8 @@ export default function Home() {
           )}
         </div>
 
-        {/* Station Selection & Next Station Badge */}
-        <div 
-          className="relative p-4 space-y-3 rounded-2xl border"
-          style={{ backgroundColor: subCardBg, borderColor }}
-        >
+        {/* Station Selection Box */}
+        <div className="relative p-4 space-y-3 rounded-2xl border" style={{ backgroundColor: subCardBg, borderColor }}>
           <div className="space-y-3" style={{ paddingRight: '40px' }}>
             <div>
               <div className="flex justify-between items-center mb-1">
@@ -387,7 +471,6 @@ export default function Home() {
           <button
             onClick={handleSwapStations}
             disabled={isBoarded}
-            title="출발역과 도착역 상호 전환"
             className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full border flex items-center justify-center shadow-md cursor-pointer disabled:opacity-30"
             style={{ backgroundColor: cardBg, borderColor, color: lineThemeColor }}
           >
@@ -395,32 +478,36 @@ export default function Home() {
           </button>
         </div>
 
-        {/* Boarding Controls */}
+        {/* Boarding & Automatic Sensor Dashboard */}
         {!isBoarded ? (
           <button
             onClick={handleStartBoarding}
             className="w-full text-white font-bold py-4 rounded-2xl border-none text-base cursor-pointer shadow-lg flex items-center justify-center gap-2"
             style={{ backgroundColor: lineThemeColor }}
           >
-            <Play className="w-5 h-5 fill-current" /> 탑승 시작하기 ({direction})
+            <Play className="w-5 h-5 fill-current" /> 자동 탑승 감지 시작 ({direction})
           </button>
         ) : (
           <div className="space-y-3">
+            {/* GPS 및 자동 감지 상태 표시 */}
             <div 
-              className="p-4 text-center rounded-2xl border"
+              className="p-4 rounded-2xl border space-y-1.5 text-xs"
               style={{ 
                 backgroundColor: isDark ? 'rgba(0,168,77,0.15)' : '#e6f7ed', 
                 borderColor: isDark ? 'rgba(0,168,77,0.3)' : '#b3e6c8' 
               }}
             >
-              <p className="text-xs font-bold flex items-center justify-center gap-1 mb-1" style={{ color: lineThemeColor }}>
-                <ShieldCheck className="w-4 h-4" /> 실시간 센서 주행 감지 중 ({direction})
-              </p>
-              <p className="text-sm font-extrabold" style={{ color: textColor }}>
+              <div className="flex items-center justify-between font-bold" style={{ color: lineThemeColor }}>
+                <span className="flex items-center gap-1"><Cpu className="w-4 h-4" /> {sensorStatus}</span>
+                <span className="flex items-center gap-1"><Navigation className="w-3.5 h-3.5" /> GPS 연결됨</span>
+              </div>
+              <p className="font-medium" style={{ color: textColor }}>{gpsLocationMsg}</p>
+              <p className="font-extrabold text-sm pt-1 border-t" style={{ borderColor: 'rgba(0,0,0,0.05)', color: textColor }}>
                 [{selectedLine}] {startStation} ➔ {endStation}
               </p>
             </div>
 
+            {/* 정차 시뮬레이터 및 자동 타이머 */}
             <div 
               className="p-4 space-y-2 rounded-2xl border"
               style={{ 
@@ -430,7 +517,7 @@ export default function Home() {
             >
               <div className="flex justify-between items-center">
                 <span className="text-xs font-bold flex items-center gap-1 text-amber-600 dark:text-amber-400">
-                  <AlertTriangle className="w-4 h-4" /> 터널 정차 시뮬레이터
+                  <AlertTriangle className="w-4 h-4" /> 수동 테스트 정차 토글
                 </span>
                 <input 
                   type="checkbox" 
@@ -441,7 +528,7 @@ export default function Home() {
               </div>
               {isStationary && (
                 <div className="text-center pt-2 border-t border-amber-200 dark:border-amber-900/50">
-                  <p className="text-xs text-amber-800 dark:text-amber-300">정차 지속: <span className="font-mono font-bold">{formatTime(delaySeconds)}</span></p>
+                  <p className="text-xs text-amber-800 dark:text-amber-300">정차 감지 지속: <span className="font-mono font-bold">{formatTime(delaySeconds)}</span></p>
                   {isDelayConfirmed && (
                     <p className="text-xs font-extrabold text-rose-600 mt-1">🚨 3분 초과 비정상 지연 확정!</p>
                   )}
@@ -454,7 +541,7 @@ export default function Home() {
               className="w-full text-white font-bold py-4 rounded-2xl border-none text-base cursor-pointer flex items-center justify-center gap-2"
               style={{ backgroundColor: isDark ? '#333333' : '#191f28' }}
             >
-              <Square className="w-5 h-5 fill-current" /> 하차 완료 (증명서 확인)
+              <Square className="w-5 h-5 fill-current" /> 하차 완료 (증명서 발급)
             </button>
           </div>
         )}
@@ -483,7 +570,7 @@ export default function Home() {
               ))
             ) : (
               <div className="text-center py-3 text-xs" style={{ color: subTextColor }}>
-                현재 운행 중인 실시간 열차 정보가 없습니다.
+                실시간 열차 위치 정보를 조회 중입니다...
               </div>
             )}
           </div>
