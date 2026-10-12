@@ -49,7 +49,6 @@ export default function Home() {
   const [startStation, setStartStation] = useState('강남');
   const [endStation, setEndStation] = useState('홍대입구');
   
-  // 관리자 모드 및 Mock 시뮬레이터 상태
   const [isAdminModeOpen, setIsAdminModeOpen] = useState(false);
   const [isMockSimulator, setIsMockSimulator] = useState(true);
 
@@ -166,7 +165,6 @@ export default function Home() {
     };
   }, [isBoarded, isMockSimulator, startStation, endStation]);
 
-  // 지연 타이머 (기준: 3분 이상 정차 시 확정)
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (isBoarded && isStationary) {
@@ -198,11 +196,16 @@ export default function Home() {
     }
   };
 
+  // 출발역/도착역 상호 전환 + 경의중앙선일 경우 상행/하행 방향도 자동 반전!
   const handleSwapStations = () => {
     if (isBoarded) return;
     const temp = startStation;
     setStartStation(endStation);
     setEndStation(temp);
+
+    if (selectedLine === '경의중앙선') {
+      setDirection((prev) => (prev === '상행' ? '하행' : '상행'));
+    }
   };
 
   const handleStartBoarding = () => {
@@ -294,7 +297,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* 🛠️ 관리자 모드 패널 */}
+        {/* 관리자 모드 패널 */}
         {isAdminModeOpen && (
           <div className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 space-y-2 text-xs">
             <div className="flex justify-between items-center font-bold text-amber-800 dark:text-amber-400">
@@ -422,6 +425,7 @@ export default function Home() {
           <button
             onClick={handleSwapStations}
             disabled={isBoarded}
+            title="출발역과 도착역 상호 전환 (경의중앙선은 상/하행 방향도 함께 전환)"
             className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full border flex items-center justify-center shadow-md cursor-pointer disabled:opacity-30"
             style={{ backgroundColor: cardBg, borderColor, color: lineThemeColor }}
           >
@@ -450,7 +454,7 @@ export default function Home() {
               </div>
               <p className="font-medium" style={{ color: textColor }}>{gpsLocationMsg}</p>
               <p className="font-extrabold text-sm pt-1 border-t" style={{ borderColor: 'rgba(0,0,0,0.05)', color: textColor }}>
-                [{selectedLine}] {startStation} ➔ {endStation}
+                [{selectedLine} · {direction}] {startStation} ➔ {endStation}
               </p>
             </div>
 
