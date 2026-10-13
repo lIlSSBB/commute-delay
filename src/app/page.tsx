@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Train, Play, Square, AlertTriangle, RefreshCw, ArrowUpDown, ShieldCheck, Sun, Moon, Monitor, ArrowRight, Navigation, Cpu, Settings, MapPin } from 'lucide-react';
+import { Train, Play, Square, AlertTriangle, RefreshCw, ArrowUpDown, ShieldCheck, Sun, Moon, Monitor, ArrowRight, Navigation, Cpu, Settings, MapPin, FileText } from 'lucide-react';
 import DelayModal from '@/components/DelayModal';
 
 const STATION_COORDINATES: Record<string, { lat: number; lng: number }> = {
@@ -141,7 +141,6 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [selectedLine, direction]);
 
-  // 실전 GPS 추적 및 가장 가까운 역 실시간 판독 로직
   useEffect(() => {
     if (!isBoarded || isMockSimulator) return;
 
@@ -151,7 +150,6 @@ export default function Home() {
         (pos) => {
           const { latitude, longitude, speed } = pos.coords;
 
-          // 1. 가장 가까운 역 찾기 (현재 위치 검증용)
           let closestStation = '';
           let minDistance = Infinity;
 
@@ -169,7 +167,6 @@ export default function Home() {
             setNearestStationInfo(`현재 위치: 역 반경 1km 이외 (이동 중)`);
           }
 
-          // 2. 속도 기반 정차 감지
           if (speed !== null) {
             const kmh = speed * 3.6;
             if (kmh < 3) {
@@ -181,7 +178,6 @@ export default function Home() {
             }
           }
 
-          // 3. 출발/도착역 매칭
           const startCoords = STATION_COORDINATES[startStation];
           const endCoords = STATION_COORDINATES[endStation];
 
@@ -297,7 +293,7 @@ export default function Home() {
           boxShadow: isDark ? '0 10px 30px rgba(0,0,0,0.5)' : '0 10px 30px rgba(0,0,0,0.08)' 
         }}
       >
-        {/* Header & Admin Mode Button */}
+        {/* Header & Controls */}
         <div className="flex items-center justify-between pb-3 border-b" style={{ borderColor }}>
           <div className="flex items-center gap-2.5">
             <div 
@@ -322,16 +318,50 @@ export default function Home() {
               <Settings className="w-3.5 h-3.5" /> 관리자 모드
             </button>
 
+            {/* 테마 전환 (라이트 / 시스템 / 다크) */}
             <div className="flex items-center gap-1 p-1 rounded-xl" style={{ backgroundColor: subCardBg }}>
               <button
                 onClick={() => setThemeMode('light')}
-                style={{ padding: '6px', borderRadius: '8px', border: 'none', cursor: 'pointer', backgroundColor: themeMode === 'light' ? cardBg : 'transparent', color: themeMode === 'light' ? textColor : subTextColor }}
+                title="라이트 모드"
+                style={{
+                  padding: '6px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  backgroundColor: themeMode === 'light' ? cardBg : 'transparent',
+                  color: themeMode === 'light' ? textColor : subTextColor,
+                  boxShadow: themeMode === 'light' ? '0 2px 6px rgba(0,0,0,0.1)' : 'none'
+                }}
               >
                 <Sun className="w-3.5 h-3.5" />
               </button>
               <button
+                onClick={() => setThemeMode('system')}
+                title="시스템 설정 반영"
+                style={{
+                  padding: '6px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  backgroundColor: themeMode === 'system' ? cardBg : 'transparent',
+                  color: themeMode === 'system' ? textColor : subTextColor,
+                  boxShadow: themeMode === 'system' ? '0 2px 6px rgba(0,0,0,0.1)' : 'none'
+                }}
+              >
+                <Monitor className="w-3.5 h-3.5" />
+              </button>
+              <button
                 onClick={() => setThemeMode('dark')}
-                style={{ padding: '6px', borderRadius: '8px', border: 'none', cursor: 'pointer', backgroundColor: themeMode === 'dark' ? cardBg : 'transparent', color: themeMode === 'dark' ? textColor : subTextColor }}
+                title="다크 모드"
+                style={{
+                  padding: '6px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  backgroundColor: themeMode === 'dark' ? cardBg : 'transparent',
+                  color: themeMode === 'dark' ? textColor : subTextColor,
+                  boxShadow: themeMode === 'dark' ? '0 2px 6px rgba(0,0,0,0.1)' : 'none'
+                }}
               >
                 <Moon className="w-3.5 h-3.5" />
               </button>
@@ -477,13 +507,24 @@ export default function Home() {
 
         {/* Boarding & Status Controls */}
         {!isBoarded ? (
-          <button
-            onClick={handleStartBoarding}
-            className="w-full text-white font-bold py-4 rounded-2xl border-none text-base cursor-pointer shadow-lg flex items-center justify-center gap-2"
-            style={{ backgroundColor: lineThemeColor }}
-          >
-            <Play className="w-5 h-5 fill-current" /> {isMockSimulator ? '모의 탑승 시작 (관리자 모드)' : '실시간 GPS 탑승 시작'} ({direction})
-          </button>
+          <div className="space-y-2">
+            <button
+              onClick={handleStartBoarding}
+              className="w-full text-white font-bold py-4 rounded-2xl border-none text-base cursor-pointer shadow-lg flex items-center justify-center gap-2"
+              style={{ backgroundColor: lineThemeColor }}
+            >
+              <Play className="w-5 h-5 fill-current" /> {isMockSimulator ? '모의 탑승 시작 (관리자 모드)' : '실시간 GPS 탑승 시작'} ({direction})
+            </button>
+
+            {/* 📄 지연증명서 양식 미리보기 버튼 추가 */}
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="w-full font-bold py-3 rounded-2xl border text-xs cursor-pointer flex items-center justify-center gap-1.5 transition-all"
+              style={{ backgroundColor: subCardBg, borderColor, color: textColor }}
+            >
+              <FileText className="w-4 h-4 text-emerald-600" /> 지연증명서 양식 미리보기 (샘플)
+            </button>
+          </div>
         ) : (
           <div className="space-y-3">
             <div 
@@ -495,7 +536,6 @@ export default function Home() {
                 <span className="flex items-center gap-1"><Navigation className="w-3.5 h-3.5" /> {isMockSimulator ? '시뮬레이터' : 'GPS 활성'}</span>
               </div>
               
-              {/* 실시간 현재 위치 인근 역 판독 뷰어 */}
               <div className="p-2 rounded-xl flex items-center gap-1.5 font-bold" style={{ backgroundColor: cardBg, color: textColor }}>
                 <MapPin className="w-4 h-4 text-emerald-600 shrink-0" />
                 <span>{nearestStationInfo}</span>
@@ -582,7 +622,7 @@ export default function Home() {
         line={selectedLine}
         startStation={startStation}
         endStation={endStation}
-        delayMinutes={Math.ceil(delaySeconds / 60)}
+        delayMinutes={Math.ceil(delaySeconds / 60) || 5} // 샘플 미리보기 시 기본 5분 표시
       />
     </main>
   );
