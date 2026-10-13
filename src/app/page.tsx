@@ -1,17 +1,35 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Train, Play, Square, AlertTriangle, RefreshCw, ArrowUpDown, ShieldCheck, Sun, Moon, Monitor, ArrowRight, Navigation, Cpu, Settings } from 'lucide-react';
+import { Train, Play, Square, AlertTriangle, RefreshCw, ArrowUpDown, ShieldCheck, Sun, Moon, Monitor, ArrowRight, Navigation, Cpu, Settings, MapPin } from 'lucide-react';
 import DelayModal from '@/components/DelayModal';
 
 const STATION_COORDINATES: Record<string, { lat: number; lng: number }> = {
-  "강남": { lat: 37.4979, lng: 127.0276 },
-  "홍대입구": { lat: 37.5575, lng: 126.9245 },
-  "신도림": { lat: 37.5087, lng: 126.8912 },
+  "시청": { lat: 37.5657, lng: 126.9772 },
+  "을지로입구": { lat: 37.5660, lng: 126.9826 },
+  "을지로3가": { lat: 37.5662, lng: 126.9918 },
+  "을지로4가": { lat: 37.5667, lng: 126.9980 },
+  "동대문역사문화공원": { lat: 37.5651, lng: 127.0079 },
+  "신당": { lat: 37.5658, lng: 127.0177 },
+  "왕십리": { lat: 37.5612, lng: 127.0371 },
+  "성수": { lat: 37.5445, lng: 127.0560 },
+  "건대입구": { lat: 37.5404, lng: 127.0704 },
+  "잠실": { lat: 37.5133, lng: 127.1001 },
   "삼성": { lat: 37.5088, lng: 127.0632 },
+  "선릉": { lat: 37.5045, lng: 127.0490 },
+  "역삼": { lat: 37.5006, lng: 127.0364 },
+  "강남": { lat: 37.4979, lng: 127.0276 },
+  "교대": { lat: 37.4934, lng: 127.0140 },
+  "사당": { lat: 37.4765, lng: 126.9816 },
+  "신림": { lat: 37.4842, lng: 126.9297 },
+  "신도림": { lat: 37.5087, lng: 126.8912 },
+  "영등포구청": { lat: 37.5258, lng: 126.8963 },
+  "합정": { lat: 37.5495, lng: 126.9141 },
+  "홍대입구": { lat: 37.5575, lng: 126.9245 },
+  "신촌": { lat: 37.5559, lng: 126.9368 },
   "디지털미디어시티": { lat: 37.5767, lng: 126.9011 },
   "공덕": { lat: 37.5432, lng: 126.9515 },
-  "왕십리": { lat: 37.5612, lng: 127.0371 }
+  "용산": { lat: 37.5298, lng: 126.9648 }
 };
 
 const SUBWAY_STATIONS: Record<string, string[]> = {
@@ -55,6 +73,7 @@ export default function Home() {
   const [isStationary, setIsStationary] = useState(false);
   const [sensorStatus, setSensorStatus] = useState<string>('시뮬레이터 대기 중');
   const [gpsLocationMsg, setGpsLocationMsg] = useState<string>('위치 추적 대기');
+  const [nearestStationInfo, setNearestStationInfo] = useState<string>('GPS 연동 전');
 
   const [delaySeconds, setDelaySeconds] = useState(0);
   const [isDelayConfirmed, setIsDelayConfirmed] = useState(false);
@@ -122,6 +141,7 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [selectedLine, direction]);
 
+  // 실전 GPS 추적 및 가장 가까운 역 실시간 판독 로직
   useEffect(() => {
     if (!isBoarded || isMockSimulator) return;
 
@@ -129,24 +149,44 @@ export default function Home() {
     if ('geolocation' in navigator) {
       watchId = navigator.geolocation.watchPosition(
         (pos) => {
-          const speed = pos.coords.speed;
+          const { latitude, longitude, speed } = pos.coords;
+
+          // 1. 가장 가까운 역 찾기 (현재 위치 검증용)
+          let closestStation = '';
+          let minDistance = Infinity;
+
+          Object.entries(STATION_COORDINATES).forEach(([stName, coords]) => {
+            const dist = calculateDistance(latitude, longitude, coords.lat, coords.lng);
+            if (dist < minDistance) {
+              minDistance = dist;
+              closestStation = stName;
+            }
+          });
+
+          if (minDistance < 1.0) {
+            setNearestStationInfo(`현재 부근: ${closestStation}역 (${(minDistance * 1000).toFixed(0)}m 앞)`);
+          } else {
+            setNearestStationInfo(`현재 위치: 역 반경 1km 이외 (이동 중)`);
+          }
+
+          // 2. 속도 기반 정차 감지
           if (speed !== null) {
             const kmh = speed * 3.6;
             if (kmh < 3) {
               setIsStationary(true);
-              setSensorStatus('센서: 터널 정차 감지됨 (0 km/h)');
+              setSensorStatus(`센서: 터널 정차 감지 (${Math.round(kmh)} km/h)`);
             } else {
               setIsStationary(false);
               setSensorStatus(`센서: 주행 중 (${Math.round(kmh)} km/h)`);
             }
           }
 
-          const { latitude, longitude } = pos.coords;
+          // 3. 출발/도착역 매칭
           const startCoords = STATION_COORDINATES[startStation];
           const endCoords = STATION_COORDINATES[endStation];
 
           if (startCoords && calculateDistance(latitude, longitude, startCoords.lat, startCoords.lng) < 0.3) {
-            setGpsLocationMsg(`출발역 [${startStation}역] 탑승 완료`);
+            setGpsLocationMsg(`출발역 [${startStation}역] 탑승 확인됨`);
           }
           if (endCoords && calculateDistance(latitude, longitude, endCoords.lat, endCoords.lng) < 0.3) {
             setGpsLocationMsg(`도착역 [${endStation}역] 접근 중 (하차 준비)`);
@@ -154,7 +194,8 @@ export default function Home() {
         },
         (err) => {
           console.warn('GPS Error:', err);
-          setGpsLocationMsg('GPS 신호 수신 불가 (관리자 모드 추천)');
+          setGpsLocationMsg('GPS 신호 수신 불가 (관리자 모드 권장)');
+          setNearestStationInfo('GPS 권한 또는 신호 확인 필요');
         },
         { enableHighAccuracy: true, maximumAge: 1000, timeout: 5000 }
       );
@@ -196,7 +237,6 @@ export default function Home() {
     }
   };
 
-  // 출발역/도착역 상호 전환 + 경의중앙선일 경우 상행/하행 방향도 자동 반전!
   const handleSwapStations = () => {
     if (isBoarded) return;
     const temp = startStation;
@@ -215,9 +255,11 @@ export default function Home() {
     if (isMockSimulator) {
       setSensorStatus('관리자 모드 (Mock 시뮬레이션 활성)');
       setGpsLocationMsg(`[가상GPS] ${startStation}역 출발 완료`);
+      setNearestStationInfo(`현재 부근: ${startStation}역 (가상 시뮬레이션)`);
     } else {
-      setSensorStatus('실제 센서 추적 개시');
-      setGpsLocationMsg('실시간 GPS 위치 수신 대기 중...');
+      setSensorStatus('실제 GPS 및 센서 추적 개시');
+      setGpsLocationMsg('실시간 GPS 위성 신호 수신 중...');
+      setNearestStationInfo('주변 지하철역 스캔 중...');
     }
   };
 
@@ -305,7 +347,7 @@ export default function Home() {
               <span className="text-[10px] bg-amber-200 dark:bg-amber-900 px-2 py-0.5 rounded-full">시연/테스트용</span>
             </div>
             <div className="flex items-center justify-between pt-1 border-t border-amber-200 dark:border-amber-900/50">
-              <span className="text-amber-900 dark:text-amber-300">Mock 시뮬레이터 사용</span>
+              <span className="text-amber-900 dark:text-amber-300">Mock 시뮬레이터 사용 (GPS 모의)</span>
               <input 
                 type="checkbox" 
                 checked={isMockSimulator} 
@@ -314,7 +356,7 @@ export default function Home() {
               />
             </div>
             <p className="text-[11px] opacity-70 text-amber-900 dark:text-amber-400">
-              * 활성화 시 실내에서도 버튼 조작으로 가상 GPS 및 정차 시뮬레이션이 가능합니다.
+              * 켜져있을 경우 실내 테스트용 가상 시뮬레이터가 작동하며, 끄면 실제 스마트폰 GPS와 주변 역 판독이 작동합니다.
             </p>
           </div>
         )}
@@ -445,13 +487,20 @@ export default function Home() {
         ) : (
           <div className="space-y-3">
             <div 
-              className="p-4 rounded-2xl border space-y-1.5 text-xs"
+              className="p-4 rounded-2xl border space-y-2 text-xs"
               style={{ backgroundColor: isDark ? 'rgba(0,168,77,0.15)' : '#e6f7ed', borderColor: isDark ? 'rgba(0,168,77,0.3)' : '#b3e6c8' }}
             >
               <div className="flex items-center justify-between font-bold" style={{ color: lineThemeColor }}>
                 <span className="flex items-center gap-1"><Cpu className="w-4 h-4" /> {sensorStatus}</span>
-                <span className="flex items-center gap-1"><Navigation className="w-3.5 h-3.5" /> {isMockSimulator ? '시뮬레이터 활성' : 'GPS 연결됨'}</span>
+                <span className="flex items-center gap-1"><Navigation className="w-3.5 h-3.5" /> {isMockSimulator ? '시뮬레이터' : 'GPS 활성'}</span>
               </div>
+              
+              {/* 실시간 현재 위치 인근 역 판독 뷰어 */}
+              <div className="p-2 rounded-xl flex items-center gap-1.5 font-bold" style={{ backgroundColor: cardBg, color: textColor }}>
+                <MapPin className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{nearestStationInfo}</span>
+              </div>
+
               <p className="font-medium" style={{ color: textColor }}>{gpsLocationMsg}</p>
               <p className="font-extrabold text-sm pt-1 border-t" style={{ borderColor: 'rgba(0,0,0,0.05)', color: textColor }}>
                 [{selectedLine} · {direction}] {startStation} ➔ {endStation}
